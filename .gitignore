@@ -1,0 +1,52 @@
+# Combined gitignore for Resume Analyzer
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*.$py.class
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+env/
+venv/
+.venv/
+*.log
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+build/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.snowflake/
+.v0-trash/
+.vercel/
+next.user-config.*
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+
+# Environment variables (DO NOT TRACK)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env

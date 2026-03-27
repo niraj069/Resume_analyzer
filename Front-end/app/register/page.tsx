@@ -18,7 +18,8 @@ export default function RegisterPage() {
     setError(undefined)
 
     try {
-      const response = await fetch('/api/auth/register', {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiBase}/api/auth/register/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -39,12 +40,12 @@ export default function RegisterPage() {
 
       toast({
         title: 'Account Created',
-        description: 'Please check your email to verify your account.',
+        description: 'Your account has been created successfully. You can now sign in.',
       })
 
-      // Store token and redirect to email verification
+      // Store token and redirect to login
       localStorage.setItem('token', result.token)
-      router.push('/verify-email')
+      router.push('/login')
     } catch (err) {
       setError('An error occurred. Please try again.')
       console.error(err)

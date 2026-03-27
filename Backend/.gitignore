@@ -1,0 +1,22 @@
+# Django/Backend ignores
+env/
+__pycache__/
+*.py[cod]
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Environment and secret files
+*.env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Virtual env (if different location)
+.venv/
+
+# logs
+*.log

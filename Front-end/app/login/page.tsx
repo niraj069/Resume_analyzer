@@ -18,7 +18,8 @@ export default function LoginPage() {
     setError(undefined)
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiBase}/api/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -41,7 +42,7 @@ export default function LoginPage() {
 
       // Store token and redirect to dashboard
       localStorage.setItem('token', result.token)
-      router.push('/dashboard')
+      router.push('/analyzer')
     } catch (err) {
       setError('An error occurred. Please try again.')
       console.error(err)
