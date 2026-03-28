@@ -6,8 +6,8 @@ import { Navbar } from '@/components/navbar'
 import { ResumeUpload } from '@/components/resume-upload'
 import { ChatMessage } from '@/components/chat-message'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Send, LogOut, Menu, X } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Send, Menu, X, MessageSquarePlus, MessageSquare } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 interface Message {
@@ -17,16 +17,28 @@ interface Message {
   timestamp: Date
 }
 
+interface SessionItem {
+  id: string
+  title: string
+  has_resume: boolean
+  created_at: string
+}
+
 export default function AnalyzerPage() {
   const [resumeFile, setResumeFile] = useState<File | null>(null)
-  const [messages, setMessages] = useState<Message[]>([
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessions, setSessions] = useState<SessionItem[]>([])
+  
+  const initialMessages: Message[] = [
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your AI Resume Analyzer. Please upload your resume and tell me about the job role or description you\'re interested in. I\'ll analyze how well your resume matches the position and provide actionable insights.',
+      content: 'Hello! I\'m your AI Career Coach. You can upload a resume to get ATS scores, or just ask me general career questions directly!',
       timestamp: new Date(),
     },
-  ])
+  ]
+  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -42,23 +54,96 @@ export default function AnalyzerPage() {
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token')
-    if (!token) {
-      router.push('/login')
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch('/api/sessions', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSessions(data.sessions || [])
+      }
+    } catch(err) {
+      console.error("Failed to fetch sessions")
     }
-  }, [router])
+  }
+
+  useEffect(() => {
+    fetchSessions()
+  }, [])
+
+  const handleNewChat = () => {
+    setSessionId(null);
+    setResumeFile(null);
+    setMessages(initialMessages);
+    setInputValue('');
+  }
+
+  const handleLoadSession = async (id: string) => {
+    setSessionId(id)
+    setResumeFile(null) // We don't have the File object anymore, but it's on the backend
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/sessions/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const formattedMessages = data.messages.map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        }))
+        setMessages(formattedMessages)
+        if (window.innerWidth < 768) setSidebarOpen(false); // Mobile auto close
+      }
+    } catch(err) {
+      toast({ title: 'Error', description: 'Failed to load chat history.', variant: 'destructive' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFileSelect = async (file: File) => {
+    handleNewChat()
+    setResumeFile(file)
+    setIsLoading(true)
+    
+    try {
+      const formData = new FormData()
+      formData.append('resume', file)
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      })
+
+      if (!response.ok) throw new Error('Failed to intialize resume session')
+
+      const data = await response.json()
+      setSessionId(data.session_id)
+
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: data.analysis,
+        timestamp: new Date(),
+      }
+
+      setMessages([assistantMessage])
+      fetchSessions() // Refresh sidebar
+      toast({ title: 'Success', description: 'Resume uploaded successfully.' })
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to upload resume.', variant: 'destructive' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !resumeFile) {
-      toast({
-        title: 'Error',
-        description: 'Please upload your resume and enter a job description.',
-        variant: 'destructive',
-      })
-      return
-    }
+    if (!inputValue.trim()) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -73,8 +158,10 @@ export default function AnalyzerPage() {
 
     try {
       const formData = new FormData()
-      formData.append('resume', resumeFile)
-      formData.append('jobDescription', inputValue)
+      if (sessionId) {
+        formData.append('session_id', sessionId)
+      }
+      formData.append('message', inputValue)
 
       const response = await fetch('/api/analyze', {
         method: 'POST',
@@ -84,32 +171,30 @@ export default function AnalyzerPage() {
         body: formData,
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to analyze resume')
-      }
+      if (!response.ok) throw new Error('Failed to analyze query')
 
       const data = await response.json()
+      
+      // If a new session was created implicitly, update state and refresh sidebar
+      if (!sessionId) {
+        setSessionId(data.session_id)
+        fetchSessions()
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.analysis || 'Analysis complete. Please try another job description.',
+        content: data.analysis || 'Analysis complete.',
         timestamp: new Date(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
-      console.error(error)
-      toast({
-        title: 'Error',
-        description: 'Failed to analyze resume. Please try again.',
-        variant: 'destructive',
-      })
-
+      toast({ title: 'Error', description: 'Failed to get analysis.', variant: 'destructive' })
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error analyzing your resume. Please try again.',
+        content: 'Sorry, I encountered an error communicating with the ATS analyzer.',
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
@@ -118,62 +203,55 @@ export default function AnalyzerPage() {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    router.push('/')
-    toast({
-      title: 'Logged out',
-      description: 'You have been logged out successfully.',
-    })
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <Navbar />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - Resume Upload */}
+        {/* Sidebar */}
         <div
           className={`${
             sidebarOpen ? 'w-full md:w-80' : 'w-0'
-          } border-r border-border bg-card transition-all duration-300 overflow-hidden flex flex-col`}
+          } border-r border-border bg-card transition-all duration-300 overflow-hidden flex flex-col shrink-0`}
         >
-          <div className="p-6 border-b border-border">
-            <h2 className="text-lg font-semibold">Resume</h2>
-            <p className="text-sm text-muted-foreground">Upload your resume to begin</p>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <ResumeUpload
-              onFileSelect={setResumeFile}
-              disabled={isLoading}
-            />
-
-            {resumeFile && (
-              <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
-                <p className="text-xs font-semibold text-primary mb-1">Resume Status</p>
-                <p className="text-sm text-foreground">Ready for analysis</p>
-              </div>
-            )}
-          </div>
-
-          <div className="p-6 border-t border-border space-y-2">
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              className="w-full justify-start gap-2"
-              size="sm"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Chats</h2>
+            </div>
+            <Button onClick={handleNewChat} variant="ghost" size="icon" title="New Chat">
+               <MessageSquarePlus className="w-5 h-5 text-primary" />
             </Button>
+          </div>
+
+          <div className="p-4 space-y-4">
+            <ResumeUpload
+              onFileSelect={handleFileSelect}
+              disabled={isLoading || sessionId !== null}
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-2 space-y-1 py-4">
+            <h3 className="text-xs font-semibold text-muted-foreground px-2 pb-2">CHAT HISTORY</h3>
+            {sessions.map((s) => (
+               <button 
+                key={s.id} 
+                onClick={() => handleLoadSession(s.id)}
+                className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center gap-3 transition-colors ${sessionId === s.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}
+               >
+                 <MessageSquare className="w-4 h-4 shrink-0 opacity-70" />
+                 <span className="truncate">{s.title}</span>
+               </button>
+            ))}
+            {sessions.length === 0 && (
+                <p className="text-xs text-muted-foreground px-3 italic">No past sessions</p>
+            )}
           </div>
         </div>
 
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col bg-background">
+        <div className="flex-1 flex flex-col bg-background min-w-0">
           {/* Header with menu toggle */}
-          <div className="md:hidden border-b border-border px-4 py-3 flex items-center gap-2">
+          <div className="border-b border-border px-4 py-3 flex items-center gap-2">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 hover:bg-secondary rounded-lg transition-colors"
@@ -184,7 +262,7 @@ export default function AnalyzerPage() {
                 <Menu className="w-5 h-5" />
               )}
             </button>
-            <h1 className="font-semibold">Resume Analyzer</h1>
+            <h1 className="font-semibold">{sessionId ? 'Active Session' : 'New Career Chat'}</h1>
           </div>
 
           {/* Messages Area */}
@@ -209,33 +287,34 @@ export default function AnalyzerPage() {
           </div>
 
           {/* Input Area */}
-          <div className="border-t border-border bg-card p-4 md:p-6">
+          <div className="border-t border-border bg-card p-4 md:p-6 shrink-0">
             <div className="max-w-4xl mx-auto">
-              <div className="flex gap-2">
-                <Input
+              <div className="flex items-end gap-2 bg-background p-1 pr-2 rounded-xl border border-border focus-within:ring-1 focus-within:ring-primary">
+                <Textarea
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
                       handleSendMessage()
                     }
                   }}
-                  placeholder="Describe the job role or paste the job description..."
-                  className="bg-background border-border focus-visible:ring-primary"
-                  disabled={isLoading || !resumeFile}
+                  placeholder="Enter a Job Description or ask for career advice..."
+                  className="min-h-[44px] max-h-48 resize-none shadow-none border-0 focus-visible:ring-0 text-base py-3 px-4"
+                  disabled={isLoading}
+                  rows={1}
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={isLoading || !resumeFile || !inputValue.trim()}
-                  className="gap-2"
+                  disabled={isLoading || !inputValue.trim()}
+                  className="gap-2 shrink-0 rounded-full h-10 w-10 mb-1"
                   size="icon"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Press Enter to send or click the send button
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                Press Enter to send, Shift+Enter for new line.
               </p>
             </div>
           </div>

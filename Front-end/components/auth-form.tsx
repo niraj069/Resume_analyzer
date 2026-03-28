@@ -182,7 +182,7 @@ export function AuthForm({ type, onSubmit, isLoading, error }: AuthFormProps) {
                 onCheckedChange={(checked) =>
                   setFormData({ ...formData, agreeToTerms: checked as boolean })
                 }
-                className="mt-1"
+                className="mt-1 border-gray-400 dark:border-gray-600"
               />
               <label
                 htmlFor="terms"

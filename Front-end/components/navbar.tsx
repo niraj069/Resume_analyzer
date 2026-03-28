@@ -3,12 +3,19 @@
 import Link from 'next/link'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Zap } from 'lucide-react'
+import { Zap, UserCircle, LogOut } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 export function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const isAuthPage = pathname === '/login' || pathname === '/register' || pathname === '/verify-email'
   const isAnalyzerPage = pathname === '/analyzer'
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -17,6 +24,12 @@ export function Navbar() {
     const token = localStorage.getItem('token')
     setIsLoggedIn(!!token)
   }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    setIsLoggedIn(false)
+    router.push('/')
+  }
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -59,29 +72,41 @@ export function Navbar() {
           {/* Right side - Theme toggle & Auth buttons */}
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            {isLoggedIn && !isAnalyzerPage && (
-              <Button
-                size="sm"
-                className="bg-primary hover:bg-primary/90"
-                asChild
-              >
-                <Link href="/analyzer">Resume Analyzer</Link>
-              </Button>
+            
+            {isLoggedIn && (
+              <>
+                {!isAnalyzerPage && (
+                  <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90"
+                    asChild
+                  >
+                    <Link href="/analyzer">Resume Analyzer</Link>
+                  </Button>
+                )}
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-full">
+                      <UserCircle className="w-6 h-6 text-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             )}
+
             {!isAuthPage && !isLoggedIn && (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  asChild
-                >
+                <Button variant="ghost" size="sm" asChild>
                   <Link href="/login">Login</Link>
                 </Button>
-                <Button
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90"
-                  asChild
-                >
+                <Button size="sm" className="bg-primary hover:bg-primary/90" asChild>
                   <Link href="/register">Sign up</Link>
                 </Button>
               </>
